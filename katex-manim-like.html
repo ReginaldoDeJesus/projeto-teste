@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>KaTeX + GSAP — Manim-like Timeline</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; background:#111; color:#eee; padding:20px; }
+    .stage { width:100%; max-width:900px; height:320px; margin: 0 auto; position:relative; overflow:hidden; border-radius:10px; background: linear-gradient(180deg,#0f1724,#071022); display:flex; align-items:center; justify-content:center; }
+    .scene { position:absolute; transform-origin:center center; }
+    .eq { font-size:40px; display:inline-block; padding:6px 12px; background: rgba(255,255,255,0.03); border-radius:8px; }
+    .controls { text-align:center; margin-top:14px; }
+    button { padding:8px 12px; border-radius:6px; border:0; background:#06b6d4; color:#022; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center">KaTeX + GSAP — "Manim-like" Timeline</h2>
+  <div class="stage" id="stage">
+    <div class="scene" id="sceneA" style="opacity:0">
+      <div class="eq" id="eqA"></div>
+    </div>
+
+    <div class="scene" id="sceneB" style="opacity:0">
+      <div class="eq" id="eqB"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="start">Executar cena</button>
+  </div>
+
+<script>
+  window.addEventListener('load', () => {
+    const eqA = document.getElementById('eqA');
+    const eqB = document.getElementById('eqB');
+    const sceneA = document.getElementById('sceneA');
+    const sceneB = document.getElementById('sceneB');
+    const start = document.getElementById('start');
+
+    // Render inicial (KaTeX)
+    eqA.innerHTML = katex.renderToString("\\text{Prova: }\\quad a^2 + b^2 = c^2");
+    eqB.innerHTML = katex.renderToString("\\text{Logo: }\\quad c = \\sqrt{a^2 + b^2}");
+
+    // Ajustes estéticos
+    eqA.style.fontSize = "34px";
+    eqB.style.fontSize = "34px";
+
+    start.addEventListener('click', () => {
+      const tl = gsap.timeline();
+
+      // Cena 1: aparece, foca, destaca a soma
+      tl.to(sceneA, { opacity: 1, scale: 1, duration: 0.6, ease: "power2.out" });
+      tl.to(eqA, { scale: 1.03, duration: 0.6, repeat: 1, yoyo: true }, "+=0.4");
+
+      // Aplica destaque ao "a^2 + b^2" - procuramos pelo conteúdo via texto (simples)
+      // Para robustez, apenas fazemos um pulso no container
+      tl.to(eqA, { boxShadow: "0 12px 40px rgba(0,140,255,0.18)", duration: 0.4 }, "-=0.4");
+      tl.to(eqA, { boxShadow: "0 0 0 rgba(0,0,0,0)", duration: 0.4 }, "+=0.4");
+
+      // Transição de cena (fade out A, fade in B) com "camera move" (scale + y)
+      tl.to(sceneA, { opacity: 0, duration: 0.6, ease: "power2.inOut" }, "+=0.6");
+      tl.to("#stage", { scale: 0.95, duration: 0.6, ease: "power2.out" }, "<");
+      tl.to(sceneB, { opacity: 1, duration: 0.8, ease: "power2.out" }, "-=0.2");
+      tl.to("#stage", { scale: 1, duration: 0.6, ease: "power2.out" }, "-=0.6");
+
+      // Cena 2: destaca a raiz
+      tl.to(eqB, { y: -8, duration: 0.5, repeat: 1, yoyo: true }, "+=0.2");
+      tl.to(eqB, { color: "#a7f3d0", duration: 0.6 }, "+=0.05");
+      tl.to(eqB, { color: "#fff", duration: 0.6 }, "+=0.6");
+    });
+  });
+</script>
+</body>
+</html>

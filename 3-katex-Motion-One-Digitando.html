@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>KaTeX + Typewriter (robusto, debug)</title>
+
+<style>
+  :root{--bg:#0b1220;--card:#0f1724;--accent:#58a6ff;--muted:#9aa6b2}
+  html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:system-ui,Arial}
+  .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+  .card{width:min(980px,96vw);background:linear-gradient(180deg,#0f1724,#071022);border-radius:12px;padding:16px;box-shadow:0 10px 40px rgba(0,0,0,0.6)}
+  h1{margin:0 0 8px 0;font-size:18px}
+  #stage{display:flex;flex-direction:column;gap:12px;align-items:center}
+  #container{font-size:clamp(20px,6vw,40px);padding:12px 16px;border-radius:10px;background:rgba(255,255,255,0.02);min-height:64px;display:inline-block}
+  .symbol{display:inline-block;opacity:0;transform:translateY(8px)}
+  .controls{display:flex;gap:8px;align-items:center}
+  button{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#001;font-weight:700;cursor:pointer}
+  .muted{color:var(--muted);font-size:13px}
+  pre.console{background:#071018;padding:10px;border-radius:8px;color:#9fd6ff;max-height:220px;overflow:auto}
+  .err{color:#ff8b8b}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>KaTeX + Typewriter — Debug & Robust</h1>
+
+      <div id="stage">
+        <div id="container" aria-live="polite">carregando...</div>
+
+        <div class="controls">
+          <button id="playBtn">Reproduzir</button>
+          <button id="restartBtn">Reiniciar</button>
+          <div class="muted" id="status">Status: inicializando</div>
+        </div>
+
+        <details style="width:100%;margin-top:8px">
+          <summary class="muted">Logs / Console (clique para abrir)</summary>
+          <pre class="console" id="log"></pre>
+        </details>
+      </div>
+    </div>
+  </div>
+
+<script>
+/*
+ Robust loader + animator:
+ - tries multiple CDNs for KaTeX and Motion One
+ - shows logs in-page
+ - falls back to a simple CSS/JS reveal if Motion One unavailable
+*/
+
+const logEl = document.getElementById('log');
+function log(...args){ console.log(...args); logEl.textContent += args.map(a => (typeof a==='object'? JSON.stringify(a,null,2):String(a))).join(' ') + '\\n'; logEl.scrollTop = logEl.scrollHeight; }
+function setStatus(t, err=false){ const s = document.getElementById('status'); s.textContent = 'Status: ' + t; s.className = err? 'err': 'muted'; log('[status]', t); }
+
+const CDNS = {
+  katex: [
+    'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js',
+    'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js',
+    'https://unpkg.com/katex@0.16.9/dist/katex.min.js'
+  ],
+  katex_css: [
+    'https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css',
+    'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css',
+    'https://unpkg.com/katex@0.16.9/dist/katex.min.css'
+  ],
+  motion_umd: [
+    'https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion.umd.min.js',
+    'https://unpkg.com/@motionone/dom/dist/motion.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion.umd.js',
+    'https://unpkg.com/@motionone/dom/dist/motion.umd.js'
+  ],
+  // skypack ESM for modern browsers (module import)
+  motion_esm: [
+    'https://cdn.skypack.dev/@motionone/dom',
+    'https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion.umd.min.js' // fallback if skypack not allowed
+  ]
+};
+
+function loadCSS(url){ return new Promise((resolve,reject)=>{ const l=document.createElement('link'); l.rel='stylesheet'; l.href=url; l.onload=()=>resolve(url); l.onerror=(e)=>reject(e); document.head.appendChild(l); }); }
+function loadScript(url){ return new Promise((resolve,reject)=>{ const s=document.createElement('script'); s.src=url; s.async=true; s.onload=()=>resolve(url); s.onerror=(e)=>reject(e); document.head.appendChild(s); }); }
+
+// try scripts sequentially
+async function tryLoadSequential(list, loader){
+  for(const u of list){
+    try{
+      log('Tentando: ', u);
+      await loader(u);
+      log('Carregado: ', u);
+      return u;
+    }catch(e){
+      log('Falhou: ', u, e && e.message ? e.message : e);
+    }
+  }
+  throw new Error('Nenhum CDN funcionou para a lista fornecida.');
+}
+
+// try to import ESM module by dynamic import
+async function tryImport(url){
+  try{
+    log('Tentando import dynamic: ' + url);
+    const m = await import(url);
+    log('Import ok:', Object.keys(m || {}));
+    return m;
+  }catch(e){
+    log('Import falhou:', e && e.message ? e.message : e);
+    throw e;
+  }
+}
+
+// main bootstrap
+(async function bootstrap(){
+  setStatus('carregando CSS KaTeX...');
+  try{
+    await tryLoadSequential(CDNS.katex_css, loadCSS);
+    log('KaTeX CSS carregado.');
+  }catch(e){
+    log('Falha ao carregar CSS KaTeX:', e);
+  }
+
+  setStatus('carregando KaTeX (JS)...');
+  let katexLoaded = false;
+  try{
+    await tryLoadSequential(CDNS.katex, loadScript);
+    katexLoaded = (typeof window.katex !== 'undefined');
+    log('katex global?', katexLoaded, 'window.katex:', !!window.katex);
+  }catch(e){
+    log('Todas tentativas KaTeX falharam:', e);
+  }
+
+  // If KaTeX not available as global, still we may try to use ESM via skypack
+  if(!katexLoaded){
+    try{
+      const m = await tryImport('https://cdn.skypack.dev/katex');
+      if(m){ window.katex = m.default || m; katexLoaded = true; log('KaTeX import via Skypack ok'); }
+    }catch(e){
+      log('KaTeX Skypack import failed:', e);
+    }
+  }
+
+  if(!katexLoaded){
+    setStatus('KaTeX não carregou (ver logs)', true);
+    document.getElementById('container').textContent = 'Erro: KaTeX não pôde ser carregado. Verifique conexão/CDN/blockers e veja os logs abaixo.';
+    return;
+  }
+
+  setStatus('KaTeX carregado, tentando Motion One (ESM/UMD)...');
+  let animateFn = null;
+  // Try ESM import first (modern)
+  try{
+    try{
+      const m = await tryImport(CDNS.motion_esm[0]);
+      animateFn = m.animate || m.default?.animate || m.default;
+      log('Motion (ESM) import result animateFn:', typeof animateFn);
+    }catch(e){
+      // fallback to UMD sequential
+      await tryLoadSequential(CDNS.motion_umd, loadScript);
+      animateFn = window.motion && window.motion.animate ? window.motion.animate : null;
+      log('Motion UMD animateFn?', !!animateFn);
+    }
+  }catch(e){
+    log('Falha ao obter Motion One por ESM ou UMD:', e);
+  }
+
+  if(!animateFn){
+    log('Motion One não disponível; iremos usar fallback CSS/JS para animação.');
+    setStatus('Motion One não carregou — fallback ativo', true);
+  } else {
+    setStatus('Motion One carregado');
+  }
+
+  // Now render KaTeX expression
+  const container = document.getElementById('container');
+  const expr = "\\int_{0}^{1} x^2 \\, dx = \\tfrac{1}{3}";
+  try{
+    if(window.katex && typeof window.katex.renderToString === 'function'){
+      container.innerHTML = window.katex.renderToString(expr, { throwOnError:false });
+    } else if(window.katex && typeof window.katex.render === 'function'){
+      // fallback render directly
+      window.katex.render(expr, container, { throwOnError:false });
+    } else {
+      container.textContent = expr;
+    }
+  }catch(e){
+    log('Erro render KaTeX:', e);
+    container.textContent = expr;
+  }
+
+  // collect candidate elements
+  function collectSymbolElements(root){
+    const rootEl = root.querySelector('.katex') || root;
+    const els = Array.from(rootEl.querySelectorAll('*')).filter(el=>{
+      const txt = (el.textContent||'').trim();
+      if(!txt) return false;
+      const hasChildren = el.children && el.children.length>0;
+      if(!hasChildren) return true;
+      for(const node of el.childNodes){
+        if(node.nodeType === Node.TEXT_NODE && node.textContent.trim()) return true;
+      }
+      return false;
+    });
+    return els;
+  }
+
+  let symbolEls = collectSymbolElements(container);
+  if(!symbolEls.length){
+    symbolEls = Array.from(container.querySelectorAll('span')) || [];
+  }
+
+  // wrap each target element in span.symbol if not already
+  symbolEls = symbolEls.map(el=>{
+    if(el.classList.contains && el.classList.contains('symbol')) return el;
+    const wrap = document.createElement('span');
+    wrap.className = 'symbol';
+    // preserve spacing by inserting wrap before el and moving el into it
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(el);
+    return wrap;
+  });
+
+  // fallback animation using CSS & simple JS if animateFn not available
+  async function playFallback({stagger=0.06, dur=360} = {}){
+    log('Executando fallback animation (no Motion).');
+    symbolEls.forEach((el,i)=>{
+      el.style.opacity = 0;
+      el.style.transform = 'translateY(8px)';
+    });
+    for(let i=0;i<symbolEls.length;i++){
+      const el = symbolEls[i];
+      await new Promise(r=>{
+        const delay = i * stagger * 1000;
+        setTimeout(()=>{
+          // simple CSS transition
+          el.style.transition = `opacity ${dur/1000}s cubic-bezier(.22,1,.36,1), transform ${dur/1000}s cubic-bezier(.22,1,.36,1)`;
+          el.style.opacity = '1';
+          el.style.transform = 'translateY(0) scale(1)';
+          // resolve after duration
+          setTimeout(()=>{ r(); }, dur+20);
+        }, delay);
+      });
+    }
+  }
+
+  // preferred animation using Motion One's animateFn
+  function playMotion({stagger=0.06, duration=360} = {}){
+    log('Executando Motion animation (preferred).');
+    symbolEls.forEach((el)=>{ el.style.opacity = 0; el.style.transform = 'translateY(8px)'; });
+    symbolEls.forEach((el,i)=>{
+      try{
+        const delay = i * stagger;
+        const a = animateFn(el, {
+          opacity: [0,1],
+          transform: ['translateY(8px) scale(0.98)', 'translateY(0px) scale(1.02)', 'translateY(0px) scale(1)']
+        }, { duration: duration/1000, easing: 'cubic-bezier(0.22,1,0.36,1)', delay });
+        // log promise finished if available
+        if(a && a.finished) a.finished.then(()=> log('element animated'));
+      }catch(e){
+        log('Erro animateFn per-element', e);
+      }
+    });
+  }
+
+  // exported controls
+  document.getElementById('playBtn').addEventListener('click', ()=>{
+    setStatus('animando');
+    if(animateFn) playMotion(); else playFallback();
+  });
+
+  document.getElementById('restartBtn').addEventListener('click', async ()=>{
+    setStatus('reiniciando');
+    symbolEls.forEach(el => { el.style.opacity = 0; el.style.transform = 'translateY(8px)'; el.style.transition = ''; });
+    await new Promise(r => setTimeout(r, 80));
+    if(animateFn) playMotion(); else await playFallback();
+  });
+
+  // auto-run once
+  setTimeout(()=> { document.getElementById('playBtn').click(); }, 300);
+
+  setStatus('pronto');
+
+})(); // bootstrap end
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>KaTeX + GSAP — Exemplo funcional</title>
+
+  <!-- KaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+  <!-- GSAP -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 20px; }
+    .container { max-width: 720px; margin: 0 auto; text-align: center; }
+    #equationWrap { display:inline-block; padding: 12px 18px; border-radius: 8px; background:#fafafa; box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+    .part { display:inline-block; vertical-align: middle; }
+    .power { display:inline-block; }
+    button { margin-top: 16px; padding:8px 12px; border-radius:6px; border:0; background:#2b79ff; color:white; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>KaTeX + GSAP — Demo</h2>
+    <div id="equationWrap" aria-hidden="true">
+      <span id="partA" class="part"></span>
+      <span style="width:12px;display:inline-block"></span>
+      <span id="partB" class="part"></span>
+    </div>
+
+    <div>
+      <button id="runBtn">Executar animação</button>
+    </div>
+  </div>
+
+<script>
+  // Aguarda KaTeX estar carregado
+  window.addEventListener('load', () => {
+    // Usamos renderToString para controlar onde inserir HTML KaTeX
+    const a = document.getElementById('partA');
+    const b = document.getElementById('partB');
+
+    // Renderizamos partes separadas para fácil seleção
+    a.innerHTML = katex.renderToString("E =");
+    b.innerHTML = katex.renderToString("m c^{2}");
+
+    // Adicionamos uma classe ao elemento do expoente para destacar depois
+    // KaTeX gera elementos span; aqui selecionamos o sup interno e o embrulhamos
+    // Pra robustez, procuramos o <sup> dentro do conteúdo de 'b' e o adicionamos uma classe.
+    const sup = b.querySelector('sup');
+    if (sup) {
+      sup.classList.add('power'); // agora podemos animar .power diretamente
+      // Opcional: torne o sup inline-block para escalas funcionarem melhor
+      sup.style.display = 'inline-block';
+    }
+
+    const eqWrap = document.getElementById('equationWrap');
+    const runBtn = document.getElementById('runBtn');
+
+    // animação ao carregar
+    gsap.from(eqWrap, { opacity: 0, y: 24, duration: 0.8, ease: "power2.out" });
+
+    runBtn.addEventListener('click', () => {
+      const tl = gsap.timeline();
+
+      // 1) pisca/destaca o expoente 3x
+      tl.to('.power', { scale: 1.5, color: "#d32f2f", duration: 0.35, repeat: 3, yoyo: true, transformOrigin: "center center" }, 0);
+
+      // 2) pequeno "saltar" do container
+      tl.to(eqWrap, { y: -18, duration: 0.6, ease: "power2.out" }, 0.9);
+      tl.to(eqWrap, { y: 0, duration: 0.6, ease: "bounce.out" }, 1.5);
+
+      // 3) troca a equação (fade out -> mudar -> fade in)
+      tl.to([a,b], { opacity: 0, duration: 0.4 }, 2.2);
+      tl.call(() => {
+        // troca o HTML para uma nova equação usando KaTeX
+        a.innerHTML = katex.renderToString("\\sqrt{a^2 + b^2}");
+        b.innerHTML = katex.renderToString("= c");
+        // reaplica classe power se houver expoente
+        const sup2 = a.querySelector('sup');
+        if (sup2) { sup2.classList.add('power'); sup2.style.display='inline-block'; }
+      }, null, 2.7);
+      tl.to([a,b], { opacity: 1, duration: 0.5 }, 2.7);
+    });
+  });
+</script>
+</body>
+</html>

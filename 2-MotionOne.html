@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>KaTeX (cdnjs) + Motion One (Skypack)</title>
+
+  <!-- KaTeX CSS (cdnjs) -->
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <!-- KaTeX JS (cdnjs) - define window.katex -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+
+  <style>
+    :root{--bg:#0b1220;--card:#0f1724;--accent:#58a6ff}
+    html,body{height:100%;margin:0;background:var(--bg);color:#fff;font-family:system-ui,Arial}
+    .wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+    .card{width:min(980px,96vw);background:var(--card);padding:18px;border-radius:12px;text-align:center}
+    #equation{font-size:clamp(20px,6vw,48px);padding:10px 14px;border-radius:8px;background:rgba(255,255,255,0.03);display:inline-block;opacity:0;transform:translateY(12px)}
+    .controls{margin-top:12px}
+    button{padding:10px 14px;border-radius:8px;border:0;background:var(--accent);color:#001;font-weight:700;cursor:pointer}
+    .muted{color:#9aa6b2;font-size:13px;margin-top:8px}
+    pre.log{max-height:160px;overflow:auto;background:#071018;padding:8px;border-radius:8px;color:#9fd6ff;text-align:left}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin:0 0 10px 0">KaTeX (cdnjs) + Motion One (Skypack)</h2>
+
+      <div id="equation" aria-live="polite">carregando...</div>
+
+      <div class="controls">
+        <button id="play">Animar</button>
+        <button id="swap">Trocar</button>
+      </div>
+
+      <div class="muted" id="status">Status: inicializando...</div>
+
+      <details style="margin-top:12px">
+        <summary class="muted">Logs / console</summary>
+        <pre class="log" id="log"></pre>
+      </details>
+    </div>
+  </div>
+
+  <!-- Motion One via Skypack será importado no script module abaixo -->
+  <script type="module">
+    const logEl = document.getElementById('log');
+    function log(...args){ console.log(...args); logEl.textContent += args.map(a => typeof a === 'object' ? JSON.stringify(a,null,2) : String(a)).join(' ') + '\\n'; logEl.scrollTop = logEl.scrollHeight; }
+    function setStatus(t){ document.getElementById('status').textContent = 'Status: ' + t; log('[status]', t); }
+
+    (async () => {
+      const eqEl = document.getElementById('equation');
+      const playBtn = document.getElementById('play');
+      const swapBtn = document.getElementById('swap');
+
+      setStatus('verificando KaTeX (cdnjs)...');
+      if (typeof window.katex === 'undefined') {
+        setStatus('Erro: KaTeX (window.katex) não definido. Verifique CDN ou bloqueio.',);
+        eqEl.textContent = 'Erro: KaTeX não carregou.';
+        log('window.katex =', window.katex);
+        return;
+      }
+      log('KaTeX disponível como global (window.katex)');
+
+      // Import Motion One via Skypack (ESM)
+      setStatus('importando Motion One via Skypack (ESM)...');
+      let animate;
+      try {
+        const mod = await import('https://cdn.skypack.dev/@motionone/dom');
+        animate = mod.animate || mod.default?.animate || (mod.default && mod.default.animate) || null;
+        log('Skypack import ok:', Object.keys(mod));
+      } catch (err) {
+        log('Erro import Skypack:', err);
+        setStatus('Falha ao importar Motion One via Skypack. Veja logs.',);
+        eqEl.textContent = 'Erro: Motion One não importou.';
+        return;
+      }
+
+      if (!animate) {
+        log('animate não encontrado no módulo importado:', animate);
+        setStatus('Falha: animate indefinido no módulo importado.');
+        return;
+      }
+
+      setStatus('KaTeX e Motion One prontos.');
+
+      // Funções utilitárias
+      const equations = [
+        '\\displaystyle E = mc^2',
+        '\\displaystyle x^2 + 2x + 1 = (x+1)^2',
+        '\\displaystyle \\int_0^1 x^2\\,dx = \\tfrac{1}{3}'
+      ];
+      let idx = 0;
+
+      function renderLatex(latex) {
+        try {
+          // preferimos renderToString para inserir HTML seguro
+          if (typeof window.katex.renderToString === 'function') {
+            eqEl.innerHTML = window.katex.renderToString(latex, { throwOnError:false });
+          } else if (typeof window.katex.render === 'function') {
+            // fallback: render diretamente no elemento
+            window.katex.render(latex, eqEl, { throwOnError:false });
+          } else {
+            eqEl.textContent = latex;
+          }
+        } catch (e) {
+          log('Erro ao renderizar KaTeX:', e);
+          eqEl.textContent = latex;
+        }
+      }
+
+      function animateIn() {
+  try {
+    const a = animate(eqEl,
+      {
+        opacity: [0, 1],
+        transform: [
+          "translateY(25px) scale(0.92)",
+          "translateY(-4px) scale(1.04)",
+          "translateY(0px) scale(1)",
+        ]
+      },
+      {
+        duration: 1.1,
+        easing: "cubic-bezier(0.22, 1, 0.36, 1)" // elastic-ish
+      }
+    );
+    if (a && a.finished) a.finished.then(() => log("animação finalizada"));
+  } catch(e) {
+    log("Erro animateIn:", e);
+  }
+}
+
+swapBtn.addEventListener("click", () => {
+  idx = (idx + 1) % equations.length;
+
+  // animação de saída antes de trocar
+  const fadeOut = animate(eqEl,
+    {
+      opacity: [1, 0],
+      transform: [
+        "translateY(0px) scale(1)",
+        "translateY(-15px) scale(0.93)"
+      ]
+    },
+    {
+      duration: 0.35,
+      easing: "ease-in"
+    }
+  );
+
+  (fadeOut && fadeOut.finished ? fadeOut.finished : Promise.resolve())
+    .then(() => {
+      renderLatex(equations[idx]);
+      animateIn(); // animação de entrada renovada
+    })
+    .catch(() => {
+      renderLatex(equations[idx]);
+      animateIn();
+    });
+});
+
+      // Inicial
+      renderLatex(equations[idx]);
+      // pequena espera para o DOM atualizar
+      setTimeout(animateIn, 200);
+
+      // eventos
+      playBtn.addEventListener('click', () => { animateIn(); });
+      swapBtn.addEventListener('click', () => {
+        idx = (idx + 1) % equations.length;
+        // fade out -> swap -> in
+        const fade = animate(eqEl, { opacity: [1,0] }, { duration: 240 });
+        (fade && fade.finished ? fade.finished : Promise.resolve()).then(() => {
+          renderLatex(equations[idx]);
+          animateIn();
+        }).catch(() => {
+          renderLatex(equations[idx]);
+          animateIn();
+        });
+      });
+
+    })();
+  </script>
+</body>
+</html>

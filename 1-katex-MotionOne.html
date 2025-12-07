@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>KaTeX + Motion One — Robusto</title>
+
+  <!-- KaTeX CSS (CDN confiável) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <style>
+    body { background:#0b1220; color:#fff; font-family:system-ui,Arial; padding:28px; }
+    #root { max-width:900px; margin:0 auto; text-align:center; }
+    #equation { font-size:44px; display:inline-block; padding:8px 12px; border-radius:8px; background:rgba(255,255,255,0.02); }
+    .status { margin-top:12px; color:#9aa6b2; font-size:13px; }
+    .err { color:#ff8080; }
+    button { margin-top:16px; padding:10px 14px; border-radius:8px; border:0; background:#58a6ff; color:#012; font-weight:700; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <h2>KaTeX + Motion One (robusto)</h2>
+    <div id="equation" aria-live="polite">carregando…</div>
+    <div>
+      <button id="btn">Executar animação</button>
+    </div>
+    <div id="msg" class="status">Aguardando bibliotecas...</div>
+  </div>
+
+  <!-- KaTeX JS (global) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+
+  <!-- Motion One via Skypack (ESM) -->
+  <script type="module">
+    // Mensagens no DOM para rastrear estado
+    const msg = document.getElementById('msg');
+    const eq = document.getElementById('equation');
+
+    // Import motion como módulo (Skypack). Se isso falhar, o erro aparecerá no console.
+    try {
+      const { animate } = await import('https://cdn.skypack.dev/@motionone/dom');
+
+      // Verifica KaTeX global
+      if (typeof window.katex === 'undefined') {
+        msg.innerHTML = '<span class="err">Erro: KaTeX não carregou (global `katex` indefinido).</span> ' +
+                        'Verifique conexão ou bloqueio de CDN.';
+        console.error('katex is undefined — KaTeX não foi carregado via CDN.');
+      } else {
+        msg.textContent = 'KaTeX e Motion One carregados com sucesso.';
+        // Renderiza equação com KaTeX de modo seguro
+        try {
+          // renderToString para HTML seguro
+          const html = katex.renderToString('\\displaystyle E = mc^2', { throwOnError: false });
+          eq.innerHTML = html;
+        } catch (e) {
+          console.error('Erro ao renderizar KaTeX:', e);
+          eq.textContent = 'Erro ao renderizar KaTeX — veja console.';
+          msg.innerHTML = '<span class="err">Erro ao renderizar KaTeX (veja console).</span>';
+        }
+
+        // Função de animação
+        function play() {
+          animate('#equation',
+            { transform: ['scale(1) translateY(0px)', 'scale(1.45) translateY(-10px)', 'scale(1) translateY(0px)'],
+              opacity: [1,1,1] },
+            { duration: 1.6, easing: 'ease-in-out' }
+          );
+        }
+
+        // Botão
+        document.getElementById('btn').addEventListener('click', () => {
+          try { play(); } catch(err) { console.error('Erro ao animar:', err); msg.innerHTML = '<span class="err">Erro na animação (veja console)</span>'; }
+        });
+
+        // auto play curto para teste
+        setTimeout(() => play(), 350);
+      }
+    } catch (importErr) {
+      console.error('Falha ao importar Motion One via Skypack:', importErr);
+      msg.innerHTML = '<span class="err">Erro ao carregar Motion One (import). Veja console.</span>';
+      // fallback: tenta carregar UMD via CDN se import falhar
+      try {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@motionone/dom/dist/motion.umd.min.js';
+        script.onload = () => {
+          console.log('Fallback UMD carregado:', typeof window.motion);
+          if (typeof window.motion !== 'undefined' && window.motion.animate) {
+            msg.textContent = 'Motion One (UMD) carregado via fallback. Preparando render...';
+            try {
+              const html = katex.renderToString('\\displaystyle E = mc^2', { throwOnError: false });
+              eq.innerHTML = html;
+            } catch(e) { eq.textContent = 'Erro ao renderizar KaTeX após fallback.'; console.error(e); }
+            // usar window.motion
+            document.getElementById('btn').addEventListener('click', () => {
+              try {
+                window.motion.animate('#equation',
+                  { transform: ['scale(1)','scale(1.45)','scale(1)'] },
+                  { duration: 1.6, easing: 'ease-in-out' });
+              } catch(e) { console.error('Erro anim UMD:', e); msg.innerHTML = '<span class="err">Erro anim UMD</span>'; }
+            });
+            setTimeout(() => { try { window.motion.animate('#equation', { scale: [1,1.45,1] }, { duration: 1.6 }); } catch(e){}} , 300);
+          } else {
+            msg.innerHTML = '<span class="err">Fallback UMD carregado, mas window.motion indefinido.</span>';
+          }
+        };
+        script.onerror = () => {
+          console.error('Não foi possível carregar fallback UMD do Motion One.');
+          msg.innerHTML = '<span class="err">Não foi possível carregar Motion One (CDN bloqueada).</span>';
+        };
+        document.body.appendChild(script);
+      } catch (e) {
+        console.error('Erro no fallback:', e);
+        msg.innerHTML = '<span class="err">Erro crítico ao tentar fallback (veja console).</span>';
+      }
+    }
+  </script>
+</body>
+</html>
